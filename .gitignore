@@ -3,3 +3,7 @@ Backups/
 __pycache__/
 *.pyc
 .index.json
+build/
+dist/
+*.spec
+release/

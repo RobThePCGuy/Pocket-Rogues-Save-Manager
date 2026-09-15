@@ -1,6 +1,6 @@
 # Pocket Rogues Save Manager
 
-Back up, restore, revive and rewind your **Pocket Rogues: Ultimate** save on Windows. A small desktop window plus a command line tool, no installation beyond Python.
+Back up, restore, revive and rewind your **Pocket Rogues: Ultimate** save on Windows. A small desktop window plus a command line tool. Download the exe and run it, nothing to install.
 
 The Windows version keeps its save in the registry as Unity PlayerPrefs. This tool snapshots that key every time it changes, shows what each snapshot holds (hero, floor, gold, gear, lifetime stats), and can put any of them back, including a few tricks the game does not offer itself.
 
@@ -18,12 +18,16 @@ The Windows version keeps its save in the registry as Unity PlayerPrefs. This to
 ## Requirements
 
 - Windows 10 or 11
-- Python 3.10 or newer from [python.org](https://www.python.org/downloads/windows/) (tick "Add python to PATH" in the installer)
 - Pocket Rogues: Ultimate (Steam)
+- Python 3.10 or newer only if you run from source, from [python.org](https://www.python.org/downloads/windows/) (tick "Add python to PATH")
 
 ## Running it
 
-Download or clone this repository, then double-click **Pocket Rogues Saves.cmd**. The window opens; backups go into a `Backups` folder next to the scripts.
+**Easiest:** download `Pocket-Rogues-Save-Manager-<version>.zip` from the [releases page](https://github.com/RobThePCGuy/Pocket-Rogues-Save-Manager/releases), unzip it anywhere, and run **Pocket Rogues Save Manager.exe**. No Python needed. Backups go into a `Backups` folder next to the exe.
+
+**From source:** clone this repository and double-click **Pocket Rogues Saves.cmd** (needs Python). Backups go next to the scripts.
+
+To build the exe yourself: `pip install pyinstaller` then run `build.cmd`; the result lands in `dist\`.
 
 Command line, from the same folder:
 
@@ -58,7 +62,9 @@ Learned by watching the registry while playing. It shapes what any backup can an
 | `save_manager_ui.py` | The desktop window |
 | `save_manager.py` | Backup, restore, revive, rewind, watch. Also the command line tool |
 | `prefs_convert.py` | PlayerPrefs format conversion (XML, .reg, .prs, JSON) |
-| `Pocket Rogues Saves.cmd` | Launcher that opens the window without a console |
+| `Pocket Rogues Saves.cmd` | Launcher that opens the window without a console (source only) |
+| `build.cmd` | Builds the single-file exe with PyInstaller |
+| `assets/` | Icon and artwork |
 
 ## Safety
 

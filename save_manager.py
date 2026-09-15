@@ -35,7 +35,7 @@ from datetime import datetime, timedelta
 REG_KEY = r"HKCU\Software\EtherGaming\Pocket Rogues"
 REG_KEY_FULL = r"HKEY_CURRENT_USER\Software\EtherGaming\Pocket Rogues"   # as written inside .reg files
 GAME_EXE = "Pocket Rogues.exe"
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
 BACKUP_DIR = os.path.join(HERE, "Backups")
 POLL_SECONDS = 1
 KEEP = 500          # plain "auto" snapshots beyond this count are deleted, oldest first

@@ -18,10 +18,15 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, ttk
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
+BUNDLE = getattr(sys, "_MEIPASS", HERE)     # where a packaged exe unpacks its own files
+if not getattr(sys, "frozen", False):        # the exe carries its own copies; never let a stray script shadow them
+    sys.path.insert(0, HERE)
 import prefs_convert  # noqa: E402
 import save_manager as sm  # noqa: E402
+sm.HERE = HERE                               # backups live next to the exe or the script
+sm.BACKUP_DIR = os.path.join(HERE, "Backups")
+ICON_FILE = os.path.join(BUNDLE, "assets", "icon.ico")
 
 INDEX_FILE = os.path.join(sm.BACKUP_DIR, ".index.json")   # cached per-backup details
 LOG_FILE = os.path.join(HERE, "save_manager_ui.log")      # everything the Activity pane shows, plus errors
@@ -231,7 +236,12 @@ def notice(parent, title, text):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Pocket Rogues Saves")
+        self.title("Pocket Rogues Save Manager")
+        if os.path.isfile(ICON_FILE):
+            try:
+                self.iconbitmap(default=ICON_FILE)
+            except tk.TclError:
+                pass
         self.minsize(900, 600)
         self.geometry("1180x760")
         self._style()
