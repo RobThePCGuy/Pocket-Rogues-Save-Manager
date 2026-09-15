@@ -30,7 +30,7 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 REG_KEY = r"HKCU\Software\EtherGaming\Pocket Rogues"
 REG_KEY_FULL = r"HKEY_CURRENT_USER\Software\EtherGaming\Pocket Rogues"   # as written inside .reg files
@@ -354,24 +354,42 @@ def backups():
 
 
 def write_backup(data: bytes, label: str = "") -> str:
+    """Write a backup named by its time to the millisecond, e.g. 2026-01-02_12-08-40-347_auto.reg.
+
+    Names sort in creation order, so `latest` and pruning see the right file. The file is
+    created exclusively; if two writers land on the same millisecond, the loser moves on
+    to the next one instead of overwriting."""
     os.makedirs(BACKUP_DIR, exist_ok=True)
-    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     label = re.sub(r"[^A-Za-z0-9_-]+", "-", label).strip("-")
-    base = f"{stamp}_{label}" if label else stamp
-    path = os.path.join(BACKUP_DIR, base + ".reg")
-    n = 1
-    while os.path.exists(path):                # same second, same label: keep both
-        n += 1
-        path = os.path.join(BACKUP_DIR, f"{base}-{n}.reg")
-    with open(path, "wb") as fh:
-        fh.write(data)
-    prune()
-    return path
+    now = datetime.now()
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    for _ in range(10000):
+        stamp = f"{now:%Y-%m-%d_%H-%M-%S}-{now.microsecond // 1000:03d}"
+        path = os.path.join(BACKUP_DIR, f"{stamp}_{label}.reg" if label else f"{stamp}.reg")
+        try:
+            fd = os.open(path, flags)
+        except FileExistsError:
+            now += timedelta(milliseconds=1)
+            continue
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        prune()
+        return path
+    raise SaveError("could not find a free backup file name")
+
+
+STAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})(?:-\d{3})?(?:_(.*))?\.reg$", re.I)
+
+
+def backup_label(path: str) -> str:
+    """The label part of a backup file name ('' for a plain or unlabelled one)."""
+    m = STAMP_RE.match(os.path.basename(path))
+    return (m.group(3) or "") if m else os.path.basename(path)[:-4]
 
 
 def prune():
     files = backups()
-    plain = [f for f in files if os.path.basename(f).endswith("_auto.reg") or "_" not in os.path.basename(f)[19:]]
+    plain = [f for f in files if os.path.basename(f).endswith("_auto.reg") or not backup_label(f)]
     marked = [f for f in files if f not in plain]
     for old in plain[KEEP:] + marked[KEEP_MARKED:]:
         os.remove(old)

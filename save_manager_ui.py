@@ -174,13 +174,11 @@ MODE_IDS = {v: k for k, v in MODE_NAMES.items()}
 
 
 def parse_name(path: str):
-    """'2025-01-02_12-08-40_pre-revive.reg' -> ('2025-01-02 12:08:40', 'pre-revive')."""
-    base = os.path.basename(path)[:-4]
-    stamp, _, label = base.partition("_")
-    if len(stamp) == 10 and label[:8].replace("-", "").isdigit():
-        clock, _, label = label.partition("_")
-        stamp = f"{stamp} {clock.replace('-', ':')}"
-    return stamp, label
+    """Backup file name -> ('YYYY-MM-DD HH:MM:SS', label). Millisecond suffixes are dropped."""
+    m = sm.STAMP_RE.match(os.path.basename(path))
+    if not m:
+        return os.path.basename(path)[:-4], ""
+    return f"{m.group(1)} {m.group(2).replace('-', ':')}", m.group(3) or ""
 
 
 # ---------------------------------------------------------------- dialogs
