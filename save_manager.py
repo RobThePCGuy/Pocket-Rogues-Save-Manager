@@ -33,11 +33,13 @@ import time
 from datetime import datetime
 
 REG_KEY = r"HKCU\Software\EtherGaming\Pocket Rogues"
+REG_KEY_FULL = r"HKEY_CURRENT_USER\Software\EtherGaming\Pocket Rogues"   # as written inside .reg files
 GAME_EXE = "Pocket Rogues.exe"
 HERE = os.path.dirname(os.path.abspath(__file__))
 BACKUP_DIR = os.path.join(HERE, "Backups")
 POLL_SECONDS = 1
 KEEP = 500          # plain "auto" snapshots beyond this count are deleted, oldest first
+STALE_EXPORT_SECONDS = 120   # a .live-* temp export older than this was abandoned by a crash
 KEEP_MARKED = 300   # labelled ones (save-exit, checkpoint, pre-*, revive, rewind, your own labels) get their own cap
 EXIT_GRACE = 8      # seconds after the game exits before an auto-restore may run
 REVIVE_WINDOW = 180 # only auto-restore if the game exits within this many seconds of a death
@@ -341,8 +343,10 @@ def backups():
     files = [f for f in os.listdir(BACKUP_DIR) if f.lower().endswith(".reg") and not f.startswith(".")]
     for stale in os.listdir(BACKUP_DIR):        # temp exports left by a crash are never backups
         if stale.startswith(".live-"):
+            full = os.path.join(BACKUP_DIR, stale)
             try:
-                os.remove(os.path.join(BACKUP_DIR, stale))
+                if time.time() - os.path.getmtime(full) > STALE_EXPORT_SECONDS:   # an export in progress is younger
+                    os.remove(full)
             except OSError:
                 pass
     files.sort(reverse=True)
@@ -353,8 +357,12 @@ def write_backup(data: bytes, label: str = "") -> str:
     os.makedirs(BACKUP_DIR, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     label = re.sub(r"[^A-Za-z0-9_-]+", "-", label).strip("-")
-    name = f"{stamp}_{label}.reg" if label else f"{stamp}.reg"
-    path = os.path.join(BACKUP_DIR, name)
+    base = f"{stamp}_{label}" if label else stamp
+    path = os.path.join(BACKUP_DIR, base + ".reg")
+    n = 1
+    while os.path.exists(path):                # same second, same label: keep both
+        n += 1
+        path = os.path.join(BACKUP_DIR, f"{base}-{n}.reg")
     with open(path, "wb") as fh:
         fh.write(data)
     prune()
@@ -435,17 +443,27 @@ def cmd_restore(what: str, force: bool, log=print):
     if game_running() and not force:
         raise SaveError(f"{GAME_EXE} is running. Close the game first, or use --force (the game will overwrite the restore on exit).")
     data = open(path, "rb").read()
-    if REG_KEY.split("\\", 1)[1].lower() not in data.decode("utf-16", errors="replace").lower():
-        raise SaveError(f"{path} does not contain the Pocket Rogues key; refusing to import it")
+    check_backup(data, os.path.basename(path))
     safety = cmd_backup("pre-restore", quiet=True)
-    delete_key()
-    import_reg(path)
-    live = export_key()
-    ok = same_values(live, data)
+    ok = restore_bytes(data)
     log(f"restored {count_values(data)} values from {os.path.basename(path)}")
     log(f"previous state kept as {os.path.basename(safety)}")
     log("verified: registry now matches the backup value for value" if ok
           else "WARNING: registry differs from the backup after import; check the file")
+
+
+SECTION_RE = re.compile(r"^\[(-?)([^\]]*)\]\s*$", re.M)
+
+
+def check_backup(data: bytes, name: str):
+    """Refuse anything that would touch a registry key other than the game's."""
+    text = data.decode("utf-16", errors="replace")
+    sections = SECTION_RE.findall(text)
+    if not sections:
+        raise SaveError(f"{name} holds no registry key; refusing to import it")
+    for minus, key in sections:
+        if minus or key.strip().lower() != REG_KEY_FULL.lower():
+            raise SaveError(f"{name} touches another registry key ({minus}{key.strip()}); refusing to import it")
 
 
 def same_values(a: bytes, b: bytes) -> bool:
@@ -456,8 +474,23 @@ def same_values(a: bytes, b: bytes) -> bool:
 def restore_file(path: str) -> bool:
     """Import a backup over the live key; returns True if the registry then matches it."""
     data = open(path, "rb").read()
-    delete_key()
-    import_reg(path)
+    check_backup(data, os.path.basename(path))
+    return restore_bytes(data)
+
+
+def restore_bytes(data: bytes) -> bool:
+    """Import .reg content held in memory, via a temp file that pruning never sees."""
+    fd, tmp = tempfile.mkstemp(prefix=".restore-", suffix=".reg", dir=BACKUP_DIR)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        delete_key()
+        import_reg(tmp)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
     return same_values(export_key(), data)
 
 

@@ -102,31 +102,29 @@ def float32_to_text(value: float) -> str:
 
 # ---------------------------------------------------------------- XML side
 
-XML_ENTRY_RE = re.compile(
-    r"<(int|float|long|boolean|string)\s+name=\"([^\"]*)\"(?:\s+value=\"([^\"]*)\")?\s*(?:/>|>(.*?)</\1>)",
-    re.S,
-)
-
-
-def xml_unescape(s: str) -> str:
-    return (s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"')
-             .replace("&apos;", "'").replace("&amp;", "&"))
-
-
 def read_xml(path: str):
     """Return list of (key, type, value). Key is the decoded (real) name."""
-    text = open(path, encoding="utf-8").read()
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.parse(path).getroot()
+    except ET.ParseError as exc:
+        raise ConvertError(f"{path} is not well-formed XML: {exc}")
     entries = []
-    for tag, name, attr_value, body in XML_ENTRY_RE.findall(text):
-        key = unquote(xml_unescape(name))
-        if tag == "string":
-            entries.append((key, "string", unquote(xml_unescape(body or ""))))
-        elif tag == "float":
-            entries.append((key, "float", float(attr_value)))
-        elif tag == "boolean":
-            entries.append((key, "int", 1 if attr_value == "true" else 0))
+    for el in root.iter():
+        if el.tag not in ("int", "float", "long", "boolean", "string") or "name" not in el.attrib:
+            continue
+        key = unquote(el.attrib["name"])
+        value = el.attrib.get("value")
+        if el.tag == "string":
+            entries.append((key, "string", unquote(el.text or "")))
+        elif value is None:
+            raise ConvertError(f"{path}: <{el.tag} name={key!r}> has no value attribute")
+        elif el.tag == "float":
+            entries.append((key, "float", float(value)))
+        elif el.tag == "boolean":
+            entries.append((key, "int", 1 if value == "true" else 0))
         else:  # int, long
-            entries.append((key, "int", int(attr_value)))
+            entries.append((key, "int", int(value)))
     return entries
 
 
