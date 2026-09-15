@@ -80,7 +80,7 @@ def describe_lines(info: dict, live: dict = None):
     elif info.get("resumable"):
         where += "  (checkpoint)"
     return [
-        ("HERO", None, None),
+        ("Hero", None, None),
         ("Class", info.get("hero_name", f"hero {info.get('hero', '?')}"), ""),
         ("Level", info.get("level", "?"), delta("level")),
         ("Where", where, ""),
@@ -91,14 +91,14 @@ def describe_lines(info: dict, live: dict = None):
         ("Floors cleared this life", info.get("run_floors", 0), delta("run_floors")),
         ("Time this life", hours(info.get("run_minutes")), ""),
         ("Unspent skill points", info.get("skill_points", 0), delta("skill_points")),
-        ("LIFETIME (this slot)", None, None),
+        ("Lifetime, this class", None, None),
         ("Guild level", info.get("guild_level", "?"), delta("guild_level")),
         ("Raids", f"{info.get('all_raids', 0)}  ({info.get('raids_no_death', 0)} without dying)", delta("all_raids")),
         ("Heroes lost", info.get("all_deaths", 0), delta("all_deaths")),
-        ("  by cause", f"monsters {cause.get('monster', 0)}, bosses {cause.get('bosses', 0)}, traps {cause.get('traps', 0)}, "
+        ("    by cause", f"monsters {cause.get('monster', 0)}, bosses {cause.get('bosses', 0)}, traps {cause.get('traps', 0)}, "
                        f"effects {cause.get('effects', 0)}, left behind {cause.get('leaved', 0)}", ""),
         ("Kills", f"{info.get('all_kills', 0):,}", delta("all_kills")),
-        ("  by tier", f"normal {tier.get('normal', 0):,}, upper {tier.get('upper', 0)}, elite {tier.get('elite', 0)}, "
+        ("    by tier", f"normal {tier.get('normal', 0):,}, upper {tier.get('upper', 0)}, elite {tier.get('elite', 0)}, "
                       f"champions {tier.get('champions', 0)}, bosses {tier.get('bosses', 0)}", ""),
         ("Gold earned", f"{info.get('all_coins', 0):,}", delta("all_coins")),
         ("Floors cleared", info.get("all_floors", 0), delta("all_floors")),
@@ -108,7 +108,7 @@ def describe_lines(info: dict, live: dict = None):
         ("Secrets found", info.get("secrets", 0), delta("secrets")),
         ("Quests done", info.get("quests", 0), delta("quests")),
         ("Play time", hours(info.get("all_minutes")), ""),
-        ("ALL CLASSES", None, None),
+        ("All classes", None, None),
         ("Total heroes lost", info.get("deaths", 0), delta("deaths")),
         ("Levels", ", ".join(f"{c} {lv}" for c, lv in info.get("level_by_class", {}).items() if lv) or "none yet", ""),
         ("Skill points", ", ".join(f"{c} {pt}" for c, pt in info.get("skill_points_by_class", {}).items() if pt) or "none", ""),
@@ -166,6 +166,11 @@ HOW_SAVING_WORKS = (
     "Watching snapshots every change. If a hero dies and you quit within 3 minutes, Revive runs by itself: "
     "the last dungeon save, the gold and XP from a second before the death, and the gear you wore when you died."
 )
+
+
+MODE_NAMES = {"xml2reg": "Android XML to Windows .reg", "reg2xml": "Windows .reg to Android XML",
+              "prs2json": "PRogues.prs to editable JSON", "json2prs": "JSON back to PRogues.prs"}
+MODE_IDS = {v: k for k, v in MODE_NAMES.items()}
 
 
 def parse_name(path: str):
@@ -302,7 +307,7 @@ class App(tk.Tk):
         acts.pack(fill="x", pady=(10, 10))
         self.btn_backup = ttk.Button(acts, text="Backup Now", style="Big.TButton", command=self.do_backup)
         self.btn_backup.pack(side="left")
-        ttk.Label(acts, text="label:").pack(side="left", padx=(10, 4))
+        ttk.Label(acts, text="Label").pack(side="left", padx=(10, 4))
         self.var_label = tk.StringVar()
         ttk.Entry(acts, textvariable=self.var_label, width=16).pack(side="left")
         ttk.Separator(acts, orient="vertical").pack(side="left", fill="y", padx=16)
@@ -319,7 +324,7 @@ class App(tk.Tk):
         vpane.pack(fill="both", expand=True)
         upper = ttk.Frame(vpane)
         lower = ttk.Frame(vpane)
-        vpane.add(upper, weight=5)
+        vpane.add(upper, weight=6)
         vpane.add(lower, weight=1)
         hpane = ttk.PanedWindow(upper, orient="horizontal")
         hpane.pack(fill="both", expand=True)
@@ -371,7 +376,7 @@ class App(tk.Tk):
 
         # details
         self.var_detail_title = tk.StringVar(value="Live save")
-        ttk.Label(right, textvariable=self.var_detail_title, style="Strong.TLabel").pack(anchor="w", padx=(10, 0), pady=(0, 6))
+        ttk.Label(right, textvariable=self.var_detail_title, style="Strong.TLabel").pack(anchor="w", padx=(10, 0), pady=(8, 8))
         dgrid = ttk.Frame(right)
         dgrid.pack(fill="both", expand=True, padx=(10, 0))
         dgrid.rowconfigure(0, weight=1)
@@ -380,7 +385,7 @@ class App(tk.Tk):
         for c, text, width, anchor in (("k", "Field", 180, "w"), ("v", "Value", 420, "w"), ("d", "Change vs live", 120, "e")):
             self.detail.heading(c, text=text, anchor=anchor)
             self.detail.column(c, width=width, minwidth=60, anchor=anchor, stretch=(c == "v"))
-        self.detail.tag_configure("head", font=("Segoe UI", 10, "bold"))
+        self.detail.tag_configure("head", background="#e9eef5", foreground="#3b4a5c")
         self.detail.tag_configure("up", foreground="#0a5")
         self.detail.tag_configure("down", foreground="#a11")
         dsb = ttk.Scrollbar(dgrid, orient="vertical", command=self.detail.yview)
@@ -392,9 +397,9 @@ class App(tk.Tk):
         self.live_info = None
 
         # activity
-        ttk.Label(lower, text="Activity", style="Strong.TLabel").pack(anchor="w", pady=(8, 2))
-        self.log_box = tk.Text(lower, height=5, wrap="word", state="disabled", font=("Consolas", 10),
-                               relief="flat", background="#f6f6f6")
+        ttk.Label(lower, text="Activity", style="Strong.TLabel").pack(anchor="w", pady=(10, 4))
+        self.log_box = tk.Text(lower, height=4, wrap="word", state="disabled", font=("Consolas", 10),
+                               relief="flat", background="#f3f4f6", padx=8, pady=6)
         lsb = ttk.Scrollbar(lower, orient="vertical", command=self.log_box.yview)
         self.log_box.configure(yscrollcommand=lsb.set)
         lsb.pack(side="right", fill="y")
@@ -468,7 +473,7 @@ class App(tk.Tk):
             prev = (gx, gy)
             if i and info.get("deaths", 0) > infos[i - 1].get("deaths", 0):
                 c.create_line(gx, top, gx, bottom, fill="#e33", width=2, dash=(3, 3))
-                c.create_text(gx, top + 8, text="died", fill="#e33", font=("Segoe UI", 8))
+                c.create_text(gx + 3, top + 2, text="died", fill="#e33", anchor="nw", font=("Segoe UI", 8))
             self.timeline_points.append((x0, x1, path, info))
         c.create_text(left, bottom + 14, text=when_text(parse_name(files[0])[0]), anchor="w", fill="#666", font=("Segoe UI", 8))
         c.create_text(right, bottom + 14, text=when_text(parse_name(files[-1])[0]), anchor="e", fill="#666", font=("Segoe UI", 8))
@@ -486,9 +491,7 @@ class App(tk.Tk):
     def _build_convert(self, root):
         ttk.Label(root, text="Convert a save file", style="Strong.TLabel").pack(anchor="w")
         ttk.Label(root, wraplength=880, foreground="#555", justify="left", text=(
-            "Pick the file to convert. The direction is chosen from its extension: "
-            ".xml (Android) becomes .reg (Windows), .reg becomes .xml, .prs becomes editable .json, "
-            "and .json becomes .prs.\n"
+            "Pick the file to convert; the direction and output name fill in from its extension. "
             "For .xml and .reg you can also give a base file: entries the input does not mention are "
             "kept from it, so Windows-only settings survive a conversion.")).pack(anchor="w", pady=(4, 14))
 
@@ -508,8 +511,8 @@ class App(tk.Tk):
 
         row(0, "Input file", self.var_src, lambda: self._browse(self.var_src, False))
         ttk.Label(grid, text="Direction").grid(row=1, column=0, sticky="w", pady=6)
-        self.mode_box = ttk.Combobox(grid, textvariable=self.var_mode, values=prefs_convert.MODES,
-                                     state="readonly", width=12)
+        self.mode_box = ttk.Combobox(grid, textvariable=self.var_mode, values=list(MODE_NAMES.values()),
+                                     state="readonly", width=30)
         self.mode_box.grid(row=1, column=1, sticky="w")
         row(2, "Output file", self.var_dst, lambda: self._browse(self.var_dst, True))
         row(3, "Base file (optional)", self.var_base, lambda: self._browse(self.var_base, False))
@@ -691,7 +694,7 @@ class App(tk.Tk):
         for pos, iid in enumerate(items):
             self.tree.move(iid, "", pos)
         for c, title in self.col_titles.items():
-            arrow = ("  v" if self.sort_desc else "  ^") if c == col else ""
+            arrow = ("  ▾" if self.sort_desc else "  ▴") if c == col else ""
             self.tree.heading(c, text=title + arrow)
 
     def _refresh_list(self):
@@ -887,14 +890,14 @@ class App(tk.Tk):
         src = self.var_src.get().strip()
         mode = prefs_convert.mode_for(src) if src else None
         if mode:
-            self.var_mode.set(mode)
+            self.var_mode.set(MODE_NAMES[mode])
             out_ext = {"xml2reg": ".reg", "reg2xml": ".xml", "prs2json": ".json", "json2prs": ".prs"}[mode]
             root, _ = os.path.splitext(src)
             self.var_dst.set(root + "_converted" + out_ext)
 
     def do_convert(self):
         src, dst, base, mode = (self.var_src.get().strip(), self.var_dst.get().strip(),
-                                self.var_base.get().strip(), self.var_mode.get())
+                                self.var_base.get().strip(), MODE_IDS.get(self.var_mode.get(), ""))
         if not src or not dst:
             notice(self, "Missing paths", "Pick an input file and an output file first.")
             return
@@ -914,7 +917,7 @@ class App(tk.Tk):
             self.log(f"convert failed: {exc}")
             return
         self.var_conv_result.set(f"Done: wrote {count} entries to {dst}")
-        self.log(f"{mode}: wrote {count} entries to {dst}")
+        self.log(f"{MODE_NAMES[mode]}: wrote {count} entries to {dst}")
 
     # ---- shutdown
 
