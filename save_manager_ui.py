@@ -350,7 +350,7 @@ class App(tk.Tk):
                  "gold": ("Gold", 70, "e"), "deaths": ("Deaths", 56, "center")}
         for c in cols:
             text, width, anchor = heads[c]
-            self.tree.heading(c, text=text)
+            self.tree.heading(c, text=text, command=lambda c=c: self._sort_by(c))
             self.tree.column(c, width=width, minwidth=width, anchor=anchor, stretch=(c == "scene"))
         grid.pack(fill="both", expand=True)
         grid.rowconfigure(0, weight=1)
@@ -366,6 +366,8 @@ class App(tk.Tk):
         self.tree.tag_configure("saveexit", foreground="#06c")
         self.tree.bind("<Double-1>", lambda e: self.do_restore())
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.sort_col, self.sort_desc = "when", True
+        self.col_titles = {c: heads[c][0] for c in cols}
 
         # details
         self.var_detail_title = tk.StringVar(value="Live save")
@@ -374,10 +376,10 @@ class App(tk.Tk):
         dgrid.pack(fill="both", expand=True, padx=(10, 0))
         dgrid.rowconfigure(0, weight=1)
         dgrid.columnconfigure(0, weight=1)
-        self.detail = ttk.Treeview(dgrid, columns=("k", "v", "d"), show="", selectmode="none")
-        self.detail.column("k", width=170, minwidth=170, anchor="w", stretch=False)
-        self.detail.column("v", width=420, minwidth=420, anchor="w", stretch=True)
-        self.detail.column("d", width=95, minwidth=95, anchor="e", stretch=False)
+        self.detail = ttk.Treeview(dgrid, columns=("k", "v", "d"), show="headings", selectmode="none")
+        for c, text, width, anchor in (("k", "Field", 180, "w"), ("v", "Value", 420, "w"), ("d", "Change vs live", 120, "e")):
+            self.detail.heading(c, text=text, anchor=anchor)
+            self.detail.column(c, width=width, minwidth=60, anchor=anchor, stretch=(c == "v"))
         self.detail.tag_configure("head", font=("Segoe UI", 10, "bold"))
         self.detail.tag_configure("up", foreground="#0a5")
         self.detail.tag_configure("down", foreground="#a11")
@@ -554,6 +556,7 @@ class App(tk.Tk):
                     self._fill_row(path)
                 elif kind == "details-done":
                     save_index(self.index)
+                    self._apply_sort()
                     if any(os.path.basename(p) not in self.index for p in self.rows.values()):
                         self._refresh_list()   # files that arrived while the reader was busy
                 elif kind == "done":
@@ -660,6 +663,37 @@ class App(tk.Tk):
 
     # ---- backup list
 
+    NUMERIC = {"depth", "level", "gold", "deaths"}
+
+    def _sort_by(self, col):
+        if col == self.sort_col:
+            self.sort_desc = not self.sort_desc
+        else:
+            self.sort_col, self.sort_desc = col, col in self.NUMERIC or col == "when"
+        self._apply_sort()
+
+    def _apply_sort(self):
+        col = self.sort_col
+        idx = list(self.tree["columns"]).index(col)
+
+        def key(iid):
+            raw = self.tree.item(iid)["values"][idx]
+            if col == "when":
+                return (0, self.rows[iid])             # the file name carries the full date and time
+            if col in self.NUMERIC:
+                try:
+                    return (0, float(str(raw).replace(",", "")))
+                except ValueError:
+                    return (1, 0.0)                    # still reading: sorts last
+            return (0, str(raw).lower())
+
+        items = sorted(self.tree.get_children(), key=key, reverse=self.sort_desc)
+        for pos, iid in enumerate(items):
+            self.tree.move(iid, "", pos)
+        for c, title in self.col_titles.items():
+            arrow = ("  v" if self.sort_desc else "  ^") if c == col else ""
+            self.tree.heading(c, text=title + arrow)
+
     def _refresh_list(self):
         pick = self._selected()
         self.tree.delete(*self.tree.get_children())
@@ -678,6 +712,7 @@ class App(tk.Tk):
                 self.tree.selection_set(iid)
         self._set_buttons()
         self._show_details()
+        self._apply_sort()
         if missing and (self.detail_thread is None or not self.detail_thread.is_alive()):
             self.detail_thread = threading.Thread(target=self._compute_details, args=(missing,), daemon=True)
             self.detail_thread.start()
