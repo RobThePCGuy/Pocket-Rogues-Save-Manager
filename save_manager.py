@@ -261,9 +261,7 @@ def build_revive(files=None):
     checkpoint = next((f for f in reversed(files[:death_at]) if has_live_layout(f)), progress)
     entries = rewind_keep_progress(checkpoint, progress)
     entries, worn = equip_death_gear(entries, death)
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    out = os.path.join(BACKUP_DIR, f"{datetime.now():%Y-%m-%d_%H-%M-%S}_revive.reg")
-    prefs_convert.write_reg(out, entries)
+    out = write_entries(entries, "revive")
     info = snapshot_info(out)
     why = (f"death after {os.path.basename(progress)}; floor from {os.path.basename(checkpoint)} "
            f"({info['scene']}, floor {info['depth']}), gold {info['gold']:,}, level {info['level']}"
@@ -325,14 +323,25 @@ def rewind_keep_progress(checkpoint: str, progress: str) -> list:
     return [(k, merged[k][0], merged[k][1]) for k in order]
 
 
+def write_entries(entries, label: str) -> str:
+    """Write PlayerPrefs entries as a labelled backup, named like every other backup."""
+    fd, tmp = tempfile.mkstemp(prefix=".build-", suffix=".reg", dir=BACKUP_DIR if os.path.isdir(BACKUP_DIR) else None)
+    os.close(fd)
+    try:
+        prefs_convert.write_reg(tmp, entries)
+        with open(tmp, "rb") as fh:
+            data = fh.read()
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    return write_backup(data, label)
+
+
 def write_rewind(checkpoint: str, progress: str, label: str = "rewind") -> str:
     """Build the rewind save as a labelled backup file and return its path."""
-    entries = rewind_keep_progress(checkpoint, progress)
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    path = os.path.join(BACKUP_DIR, f"{stamp}_{label}.reg")
-    prefs_convert.write_reg(path, entries)
-    return path
+    return write_entries(rewind_keep_progress(checkpoint, progress), label)
 
 
 # ---------------------------------------------------------------- backups
@@ -353,29 +362,44 @@ def backups():
     return [os.path.join(BACKUP_DIR, f) for f in files]
 
 
+_name_lock = threading.Lock()
+_last_stamp_time = None
+
+
 def write_backup(data: bytes, label: str = "") -> str:
     """Write a backup named by its time to the millisecond, e.g. 2026-01-02_12-08-40-347_auto.reg.
 
     Names sort in creation order, so `latest` and pruning see the right file. The file is
     created exclusively; if two writers land on the same millisecond, the loser moves on
     to the next one instead of overwriting."""
+    global _last_stamp_time
     os.makedirs(BACKUP_DIR, exist_ok=True)
     label = re.sub(r"[^A-Za-z0-9_-]+", "-", label).strip("-")
-    now = datetime.now()
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-    for _ in range(10000):
-        stamp = f"{now:%Y-%m-%d_%H-%M-%S}-{now.microsecond // 1000:03d}"
-        path = os.path.join(BACKUP_DIR, f"{stamp}_{label}.reg" if label else f"{stamp}.reg")
-        try:
-            fd = os.open(path, flags)
-        except FileExistsError:
-            now += timedelta(milliseconds=1)
-            continue
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-        prune()
-        return path
-    raise SaveError("could not find a free backup file name")
+    with _name_lock:
+        now = datetime.now()
+        if _last_stamp_time is not None and now <= _last_stamp_time:
+            now = _last_stamp_time + timedelta(milliseconds=1)   # never reuse a stamp, whatever the label
+        taken = {f[:23] for f in os.listdir(BACKUP_DIR) if STAMP_RE.match(f)}   # stamps other processes used
+        for _ in range(10000):
+            stamp = f"{now:%Y-%m-%d_%H-%M-%S}-{now.microsecond // 1000:03d}"
+            if stamp in taken:
+                now += timedelta(milliseconds=1)
+                continue
+            path = os.path.join(BACKUP_DIR, f"{stamp}_{label}.reg" if label else f"{stamp}.reg")
+            try:
+                fd = os.open(path, flags)
+            except FileExistsError:
+                now += timedelta(milliseconds=1)
+                continue
+            _last_stamp_time = now
+            break
+        else:
+            raise SaveError("could not find a free backup file name")
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+    prune()
+    return path
 
 
 STAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})(?:-\d{3})?(?:_(.*))?\.reg$", re.I)
